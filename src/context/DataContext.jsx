@@ -85,6 +85,17 @@ export function DataProvider({ children }) {
       ...d,
       movCC: { ...d.movCC, [clienteId]: [...(d.movCC[clienteId] || []), saved] },
     }))
+
+    if (mov.tipo === 'abono') {
+      await addMovimiento({
+        tipo: 'ingreso',
+        cat: 'venta-local',
+        monto: mov.monto,
+        description: mov.description || 'Abono cuenta corriente',
+        metodo: 'cuenta-corriente',
+        fecha: mov.fecha,
+      })
+    }
   }
 
   const addCheque = async (item) => {

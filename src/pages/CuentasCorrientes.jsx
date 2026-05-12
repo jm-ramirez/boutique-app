@@ -47,9 +47,12 @@ export default function CuentasCorrientes() {
 
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem' }}>
-          <Btn size="sm" onClick={() => setActiveId(null)}><i className="ti ti-arrow-left" aria-hidden="true" /> Volver</Btn>
-          <h1 style={{ fontSize: 18, fontWeight: 500 }}>{cl?.nombre}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <Btn size="sm" onClick={() => setActiveId(null)}><i className="ti ti-arrow-back" aria-hidden="true" /> Volver</Btn>
+          <h1 style={{ fontSize: 18, fontWeight: 500, margin: 0 }}>{cl?.nombre}</h1>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+          Los cargos aumentan la deuda del cliente. Los abonos se registran también como ingreso en Ingresos/Gastos con método "Cuenta corriente".
         </div>
         <Grid cols={3}>
           <Metric label="Saldo actual" value={fmt(Math.abs(deuda))} sub={deuda > 0 ? 'debe' : 'sin deuda'} color={deuda > 0 ? '#A32D2D' : '#0F6E56'} />
@@ -130,7 +133,10 @@ export default function CuentasCorrientes() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 18, fontWeight: 500, marginBottom: '1rem' }}>Cuentas corrientes</h1>
+      <h1 style={{ fontSize: 18, fontWeight: 500, marginBottom: '0.5rem' }}>Cuentas corrientes</h1>
+      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+        Para cargar un cargo o un abono, primero agregá el cliente y luego abrí su cuenta corriente.
+      </div>
       <Card>
         <CardTitle>Agregar cliente</CardTitle>
         <FormRow>
@@ -151,18 +157,25 @@ export default function CuentasCorrientes() {
         const saldo = movs.reduce((s, m) => m.tipo === 'cargo' ? s + m.monto : s - m.monto, 0)
         const vencidas = movs.filter(m => m.tipo === 'cargo' && m.vence && diffDias(m.vence) < 0).length
         return (
-          <Card key={cl.id} style={{ cursor: 'pointer' }} onClick={() => setActiveId(cl.id)}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Card key={cl.id}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontWeight: 500, fontSize: 14 }}>{cl.nombre}</div>
                 {cl.tel && <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{cl.tel}</div>}
               </div>
-              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+
+              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, minWidth: 140 }}>
                 <span style={{ fontWeight: 500, fontSize: 16, color: saldo > 0 ? '#A32D2D' : '#0F6E56' }}>{fmt(Math.abs(saldo))}</span>
                 <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{saldo > 0 ? 'debe' : 'sin deuda'}</span>
                 {vencidas > 0 && <Badge type="vencido">{vencidas} cuota{vencidas > 1 ? 's' : ''} vencida{vencidas > 1 ? 's' : ''}</Badge>}
-                <Btn size="sm" variant="danger" onClick={e => { e.stopPropagation(); borrarCliente(cl.id) }}>
-                  <i className="ti ti-trash" aria-hidden="true" />
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Btn size="sm" variant="success" onClick={() => setActiveId(cl.id)}>
+                  <i className="ti ti-list-check" aria-hidden="true" /> Cuenta corriente
+                </Btn>
+                <Btn size="sm" variant="danger" onClick={() => borrarCliente(cl.id)}>
+                  <i className="ti ti-trash" aria-hidden="true" /> Eliminar
                 </Btn>
               </div>
             </div>
