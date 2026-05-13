@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useData } from '../context/DataContext'
-import { fmt, fmtDate, today, diffDias } from '../utils/helpers'
+import { fmt, fmtDate, today, diffDias, METODOS_PAGO } from '../utils/helpers'
 import { Card, CardTitle, Metric, Btn, FormRow, FormGroup, Badge, Grid, TableWrapper, Th, Td, Empty } from '../components/UI'
 
 export function Cobros() {
@@ -32,7 +32,10 @@ export function Cobros() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 18, fontWeight: 500, marginBottom: '1rem' }}>Cobros pendientes</h1>
+      <h1 style={{ fontSize: 18, fontWeight: 500, marginBottom: '0.5rem' }}>Cobros pendientes</h1>
+      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+        Al marcar un cheque como cobrado o una tarjeta como acreditada, se registra automáticamente el ingreso en Ingresos/Gastos.
+      </div>
 
       <Card>
         <CardTitle>Registrar cheque a cobrar</CardTitle>
@@ -131,89 +134,318 @@ export function Cobros() {
 }
 
 export function Proveedores() {
-  const { data, addProveedor, marcarProveedorPagado } = useData()
-  const [form, setForm] = useState({ nombre: '', monto: '', tipo: 'efectivo', description: '', fecha: today(), vence: '', cuotas: '', cuota_monto: '' })
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const { data, addProveedor, removeProveedor, marcarProveedorPagado, addMovimiento } = useData()
 
-  const agregar = async () => {
-    if (!form.monto) return alert('Ingresá el monto')
-    const payload = { ...form, monto: +form.monto, cuotas: +form.cuotas || 1, cuota_monto: +form.cuota_monto || 0, pagado: false }
-    if (!payload.vence) payload.vence = null
-    await addProveedor(payload)
-    setForm({ nombre: '', monto: '', tipo: 'efectivo', description: '', fecha: today(), vence: '', cuotas: '', cuota_monto: '' })
+  const [provNombres, setProvNombres] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('boutique_prov_nombres') || '[]') } catch { return [] }
+  })
+  const [activeProveedor, setActiveProveedor] = useState(null)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [tab, setTab] = useState('deuda')
+  const [deudaForm, setDeudaForm] = useState({ monto: '', tipo: 'efectivo', description: '', fecha: today(), vence: '' })
+  const [pagoForm, setPagoForm] = useState({ monto: '', metodo: 'efectivo', description: '', fecha: today() })
+  const setDeuda = (k, v) => setDeudaForm(f => ({ ...f, [k]: v }))
+  const setPago = (k, v) => setPagoForm(f => ({ ...f, [k]: v }))
+
+  const tipoLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', cheque: 'Cheque dif.', cuotas: 'Cuotas', pago: 'Pago' }
+
+  const nombresEnData = [...new Set(data.proveedores.map(p => p.nombre?.trim()).filter(Boolean))]
+  const todosNombres = [...new Set([...provNombres, ...nombresEnData])].sort()
+
+  const saveNombres = (nombres) => {
+    setProvNombres(nombres)
+    localStorage.setItem('boutique_prov_nombres', JSON.stringify(nombres))
   }
 
-  const pend = data.proveedores.filter(p => !p.pagado).sort((a, b) => a.vence.localeCompare(b.vence))
-  const totalDeuda = pend.reduce((s, p) => s + p.monto, 0)
-  const venc30 = pend.filter(p => { const d = diffDias(p.vence); return d !== null && d <= 30 }).reduce((s, p) => s + p.monto, 0)
-  const tipoLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', cheque: 'Cheque dif.', cuotas: 'Cuotas' }
+  const agregarProveedor = () => {
+    const nombre = nuevoNombre.trim()
+    if (!nombre) return alert('Ingresá un nombre')
+    if (todosNombres.map(n => n.toLowerCase()).includes(nombre.toLowerCase())) return alert('Ya existe ese proveedor')
+    saveNombres([...provNombres, nombre])
+    setNuevoNombre('')
+  }
+
+  const eliminarProveedor = async (nombre) => {
+    if (!confirm(`¿Eliminar "${nombre}" y todos sus movimientos?`)) return
+    await removeProveedor(nombre)
+    saveNombres(provNombres.filter(n => n !== nombre))
+    if (activeProveedor === nombre) setActiveProveedor(null)
+  }
+
+  const buildStats = (nombre) => {
+    const rows = data.proveedores.filter(p => (p.nombre || '').trim() === nombre)
+    const facturas = rows.filter(p => p.tipo !== 'pago')
+    const pendientes = facturas.filter(f => !f.pagado)
+    const deudaPendiente = pendientes.reduce((s, f) => s + f.monto, 0)
+    const vencidas = pendientes.filter(f => f.vence && diffDias(f.vence) < 0).length
+    return { nombre, rows, facturas, pendientes, deudaPendiente, vencidas }
+  }
+
+  const proveedoresList = todosNombres.map(buildStats)
+  const totalDeuda = proveedoresList.reduce((s, p) => s + p.deudaPendiente, 0)
+  const totalVencidas = proveedoresList.reduce((s, p) => s + p.vencidas, 0)
+
+  const registrarDeuda = async () => {
+    if (!deudaForm.monto || +deudaForm.monto <= 0) return alert('Ingresá un monto')
+    await addProveedor({
+      nombre: activeProveedor,
+      monto: +deudaForm.monto,
+      tipo: deudaForm.tipo,
+      description: deudaForm.description,
+      fecha: deudaForm.fecha,
+      vence: deudaForm.vence || null,
+      pagado: false,
+    })
+    setDeudaForm({ monto: '', tipo: 'efectivo', description: '', fecha: today(), vence: '' })
+  }
+
+  const registrarPago = async () => {
+    if (!pagoForm.monto || +pagoForm.monto <= 0) return alert('Ingresá un monto')
+    await addProveedor({
+      nombre: activeProveedor,
+      monto: +pagoForm.monto,
+      tipo: 'pago',
+      description: pagoForm.description || 'Pago proveedor',
+      fecha: pagoForm.fecha,
+      vence: null,
+      pagado: true,
+    })
+    await addMovimiento({
+      tipo: 'gasto',
+      cat: 'mercaderia',
+      monto: +pagoForm.monto,
+      description: `Pago a ${activeProveedor}${pagoForm.description ? ' - ' + pagoForm.description : ''}`,
+      metodo: pagoForm.metodo,
+      fecha: pagoForm.fecha,
+    })
+    setPagoForm({ monto: '', metodo: 'efectivo', description: '', fecha: today() })
+  }
+
+  if (activeProveedor) {
+    const stats = buildStats(activeProveedor)
+    const timeline = [...stats.rows].sort((a, b) => b.fecha.localeCompare(a.fecha))
+
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <Btn size="sm" onClick={() => setActiveProveedor(null)}><i className="ti ti-arrow-back" aria-hidden="true" /> Volver</Btn>
+          <h1 style={{ fontSize: 18, fontWeight: 500, margin: 0 }}>{activeProveedor}</h1>
+        </div>
+
+        <Grid cols={3}>
+          <Metric label="Saldo pendiente" value={fmt(stats.deudaPendiente)} color={stats.deudaPendiente > 0 ? '#A32D2D' : '#0F6E56'} sub={stats.deudaPendiente > 0 ? 'a pagar' : 'sin deuda'} />
+          <Metric label="Facturas pendientes" value={stats.pendientes.length} />
+          <Metric label="Vencidas" value={stats.vencidas} color={stats.vencidas > 0 ? '#A32D2D' : undefined} />
+        </Grid>
+
+        <Card>
+          <div style={{ display: 'flex', gap: 8, marginBottom: '1rem' }}>
+            <Btn
+              variant={tab === 'deuda' ? 'primary' : 'default'}
+              size="sm"
+              onClick={() => setTab('deuda')}
+            >
+              <i className="ti ti-plus" aria-hidden="true" /> Nueva deuda / factura
+            </Btn>
+            <Btn
+              variant={tab === 'pago' ? 'success' : 'default'}
+              size="sm"
+              onClick={() => setTab('pago')}
+            >
+              <i className="ti ti-cash" aria-hidden="true" /> Registrar pago
+            </Btn>
+          </div>
+
+          {tab === 'deuda' && (
+            <>
+              <CardTitle>Nueva deuda / factura</CardTitle>
+              <FormRow>
+                <FormGroup label="Monto ($)" style={{ maxWidth: 130 }}>
+                  <input type="number" value={deudaForm.monto} onChange={e => setDeuda('monto', e.target.value)} placeholder="0" />
+                </FormGroup>
+                <FormGroup label="Forma de pago" style={{ maxWidth: 150 }}>
+                  <select value={deudaForm.tipo} onChange={e => setDeuda('tipo', e.target.value)}>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="transferencia">Transferencia</option>
+                    <option value="cheque">Cheque diferido</option>
+                    <option value="cuotas">Cuotas</option>
+                  </select>
+                </FormGroup>
+                <FormGroup label="Descripción">
+                  <input type="text" value={deudaForm.description} onChange={e => setDeuda('description', e.target.value)} placeholder="Ej: Remeras verano x50" />
+                </FormGroup>
+              </FormRow>
+              <FormRow>
+                <FormGroup label="Fecha de compra" style={{ maxWidth: 140 }}>
+                  <input type="date" value={deudaForm.fecha} onChange={e => setDeuda('fecha', e.target.value)} />
+                </FormGroup>
+                <FormGroup label="Fecha de vencimiento" style={{ maxWidth: 140 }}>
+                  <input type="date" value={deudaForm.vence} onChange={e => setDeuda('vence', e.target.value)} />
+                </FormGroup>
+              </FormRow>
+              <Btn variant="primary" onClick={registrarDeuda}>
+                <i className="ti ti-plus" aria-hidden="true" /> Registrar deuda
+              </Btn>
+            </>
+          )}
+
+          {tab === 'pago' && (
+            <>
+              <CardTitle>Registrar pago</CardTitle>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
+                El pago se registrará automáticamente como gasto en Ingresos/Gastos.
+              </div>
+              <FormRow>
+                <FormGroup label="Monto ($)" style={{ maxWidth: 130 }}>
+                  <input type="number" value={pagoForm.monto} onChange={e => setPago('monto', e.target.value)} placeholder="0" />
+                </FormGroup>
+                <FormGroup label="Medio de pago" style={{ maxWidth: 150 }}>
+                  <select value={pagoForm.metodo} onChange={e => setPago('metodo', e.target.value)}>
+                    {METODOS_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </FormGroup>
+                <FormGroup label="Descripción">
+                  <input type="text" value={pagoForm.description} onChange={e => setPago('description', e.target.value)} placeholder="Ej: Pago factura / Anticipo" />
+                </FormGroup>
+                <FormGroup label="Fecha" style={{ maxWidth: 140 }}>
+                  <input type="date" value={pagoForm.fecha} onChange={e => setPago('fecha', e.target.value)} />
+                </FormGroup>
+              </FormRow>
+              <Btn variant="success" onClick={registrarPago}>
+                <i className="ti ti-check" aria-hidden="true" /> Registrar pago
+              </Btn>
+            </>
+          )}
+        </Card>
+
+        {stats.pendientes.length > 0 && (
+          <Card style={{ padding: 0, overflow: 'auto' }}>
+            <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 500, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '.4px' }}>
+              Facturas pendientes
+            </div>
+            <TableWrapper>
+              <thead><tr>
+                <Th>Fecha</Th><Th>Descripción</Th><Th>Forma</Th>
+                <Th style={{ textAlign: 'right' }}>Monto</Th><Th>Vence</Th><Th />
+              </tr></thead>
+              <tbody>{stats.pendientes.sort((a, b) => a.fecha.localeCompare(b.fecha)).map(p => {
+                const dias = diffDias(p.vence)
+                return (
+                  <tr key={p.id}>
+                    <Td>{fmtDate(p.fecha)}</Td>
+                    <Td style={{ color: 'var(--color-text-secondary)' }}>{p.description || '—'}</Td>
+                    <Td>{tipoLabel[p.tipo] || p.tipo}</Td>
+                    <Td style={{ textAlign: 'right', fontWeight: 500, color: '#A32D2D' }}>{fmt(p.monto)}</Td>
+                    <Td>
+                      {p.vence
+                        ? <Badge type={dias < 0 ? 'vencido' : dias <= 7 ? 'pendiente' : 'default'}>
+                            {dias < 0 ? `Vencido ${Math.abs(dias)}d` : dias === 0 ? 'Hoy' : fmtDate(p.vence)}
+                          </Badge>
+                        : '—'}
+                    </Td>
+                    <Td>
+                      <Btn variant="success" size="sm" onClick={() => marcarProveedorPagado(p.id)}>
+                        <i className="ti ti-check" aria-hidden="true" /> Pagar
+                      </Btn>
+                    </Td>
+                  </tr>
+                )
+              })}</tbody>
+            </TableWrapper>
+          </Card>
+        )}
+
+        <Card style={{ padding: 0, overflow: 'auto' }}>
+          <div style={{ padding: '10px 14px 4px', fontSize: 11, fontWeight: 500, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '.4px' }}>
+            Historial completo
+          </div>
+          <TableWrapper>
+            <thead><tr>
+              <Th>Fecha</Th><Th>Tipo</Th><Th>Descripción</Th>
+              <Th style={{ textAlign: 'right' }}>Monto</Th><Th>Estado</Th>
+            </tr></thead>
+            <tbody>
+              {timeline.length ? timeline.map(p => (
+                <tr key={p.id}>
+                  <Td>{fmtDate(p.fecha)}</Td>
+                  <Td><Badge type={p.tipo === 'pago' ? 'ingreso' : 'gasto'}>{p.tipo === 'pago' ? 'Pago' : 'Deuda'}</Badge></Td>
+                  <Td style={{ color: 'var(--color-text-secondary)' }}>{p.description || '—'}</Td>
+                  <Td style={{ textAlign: 'right', fontWeight: 500, color: p.tipo === 'pago' ? '#0F6E56' : '#A32D2D' }}>
+                    {p.tipo === 'pago' ? '-' : '+'}{fmt(p.monto)}
+                  </Td>
+                  <Td>
+                    {p.pagado || p.tipo === 'pago'
+                      ? <Badge type="pagado">Pagado</Badge>
+                      : <Badge type="pendiente">Pendiente</Badge>}
+                  </Td>
+                </tr>
+              )) : <tr><td colSpan={5}><Empty>Sin movimientos</Empty></td></tr>}
+            </tbody>
+          </TableWrapper>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div>
-      <h1 style={{ fontSize: 18, fontWeight: 500, marginBottom: '1rem' }}>Proveedores</h1>
-      <Card>
-        <CardTitle>Registrar deuda con proveedor</CardTitle>
-        <FormRow>
-          <FormGroup label="Proveedor"><input type="text" value={form.nombre} onChange={e => set('nombre', e.target.value)} placeholder="Ej: Distribuidora Rosario" /></FormGroup>
-          <FormGroup label="Monto total ($)" style={{ maxWidth: 130 }}><input type="number" value={form.monto} onChange={e => set('monto', e.target.value)} /></FormGroup>
-          <FormGroup label="Forma de pago" style={{ maxWidth: 130 }}>
-            <select value={form.tipo} onChange={e => set('tipo', e.target.value)}>
-              <option value="efectivo">Efectivo</option>
-              <option value="transferencia">Transferencia</option>
-              <option value="cheque">Cheque diferido</option>
-              <option value="cuotas">Cuotas</option>
-            </select>
-          </FormGroup>
-        </FormRow>
-        <FormRow>
-          <FormGroup label="Descripción"><input type="text" value={form.description} onChange={e => set('description', e.target.value)} placeholder="Ej: Remeras verano x50" /></FormGroup>
-          <FormGroup label="Fecha de compra" style={{ maxWidth: 140 }}><input type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)} /></FormGroup>
-          <FormGroup label="Fecha de vencimiento" style={{ maxWidth: 140 }}><input type="date" value={form.vence} onChange={e => set('vence', e.target.value)} /></FormGroup>
-        </FormRow>
-        {form.tipo === 'cuotas' && (
-          <FormRow>
-            <FormGroup label="Cant. cuotas" style={{ maxWidth: 120 }}><input type="number" value={form.cuotas} onChange={e => set('cuotas', e.target.value)} placeholder="3" /></FormGroup>
-            <FormGroup label="Monto por cuota ($)" style={{ maxWidth: 160 }}><input type="number" value={form.cuota_monto} onChange={e => set('cuota_monto', e.target.value)} /></FormGroup>
-          </FormRow>
-        )}
-        <Btn variant="primary" onClick={agregar}><i className="ti ti-plus" aria-hidden="true" /> Registrar deuda</Btn>
-      </Card>
+      <h1 style={{ fontSize: 18, fontWeight: 500, marginBottom: '0.5rem' }}>Proveedores</h1>
+      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+        Administrá las facturas y pagos de cada proveedor.
+      </div>
 
-      <Grid cols={2}>
-        <Metric label="Deuda total pendiente" value={fmt(totalDeuda)} color="#A32D2D" />
-        <Metric label="Vence en próximos 30 días" value={fmt(venc30)} color="#BA7517" />
+      <Grid cols={2} style={{ gap: 8 }}>
+        <Metric label="Deuda total pendiente" value={fmt(totalDeuda)} color={totalDeuda > 0 ? '#A32D2D' : '#0F6E56'} sub={totalDeuda > 0 ? 'a pagar' : 'sin deuda'} />
+        <Metric label="Facturas vencidas" value={totalVencidas} color={totalVencidas > 0 ? '#A32D2D' : undefined} />
       </Grid>
 
-      {pend.length ? (
-        <Card style={{ padding: 0, overflow: 'auto' }}>
-          <TableWrapper>
-            <thead><tr>
-              <Th>Proveedor</Th><Th>Descripción</Th><Th>Tipo pago</Th>
-              <Th style={{ textAlign: 'right' }}>Monto</Th><Th>Vence</Th><Th />
-            </tr></thead>
-            <tbody>{pend.map(p => {
-              const dias = diffDias(p.vence)
-              return (
-                <tr key={p.id}>
-                  <Td style={{ fontWeight: 500 }}>{p.nombre}</Td>
-                  <Td style={{ color: 'var(--color-text-secondary)' }}>{p.description || '—'}</Td>
-                  <Td>{p.tipo === 'cuotas' ? `${p.cuotas} cuotas` : tipoLabel[p.tipo]}</Td>
-                  <Td style={{ textAlign: 'right', fontWeight: 500, color: '#A32D2D' }}>{fmt(p.monto)}</Td>
-                  <Td>{dias !== null
-                    ? <Badge type={dias < 0 ? 'vencido' : dias <= 7 ? 'pendiente' : 'default'}>
-                        {dias < 0 ? `Vencido ${Math.abs(dias)}d` : dias === 0 ? 'Hoy' : `En ${dias}d`} ({fmtDate(p.vence)})
-                      </Badge>
-                    : '—'}
-                  </Td>
-                  <Td><Btn variant="success" size="sm" onClick={() => marcarProveedorPagado(p.id)}>
-                    <i className="ti ti-check" aria-hidden="true" /> Pagado
-                  </Btn></Td>
-                </tr>
-              )
-            })}</tbody>
-          </TableWrapper>
+      <Card>
+        <CardTitle>Agregar proveedor</CardTitle>
+        <FormRow>
+          <FormGroup label="Nombre del proveedor">
+            <input
+              type="text"
+              value={nuevoNombre}
+              onChange={e => setNuevoNombre(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && agregarProveedor()}
+              placeholder="Ej: Distribuidora Rosario"
+            />
+          </FormGroup>
+          <Btn variant="primary" onClick={agregarProveedor} style={{ flexShrink: 0, alignSelf: 'flex-end' }}>
+            <i className="ti ti-plus" aria-hidden="true" /> Agregar
+          </Btn>
+        </FormRow>
+      </Card>
+
+      {proveedoresList.length ? proveedoresList.map(p => (
+        <Card key={p.nombre}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontWeight: 500, fontSize: 14 }}>{p.nombre}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                {p.pendientes.length} factura{p.pendientes.length !== 1 ? 's' : ''} pendiente{p.pendientes.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <span style={{ fontWeight: 500, fontSize: 16, color: p.deudaPendiente > 0 ? '#A32D2D' : '#0F6E56' }}>
+                {fmt(p.deudaPendiente)}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                {p.deudaPendiente > 0 ? 'a pagar' : 'sin deuda'}
+              </span>
+              {p.vencidas > 0 && <Badge type="vencido">{p.vencidas} vencida{p.vencidas !== 1 ? 's' : ''}</Badge>}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Btn size="sm" variant="success" onClick={() => { setActiveProveedor(p.nombre); setTab('deuda') }}>
+                <i className="ti ti-list-check" aria-hidden="true" /> Cuenta corriente
+              </Btn>
+              <Btn size="sm" variant="danger" onClick={() => eliminarProveedor(p.nombre)}>
+                <i className="ti ti-trash" aria-hidden="true" /> Eliminar
+              </Btn>
+            </div>
+          </div>
         </Card>
-      ) : <Card><Empty>Sin deudas pendientes con proveedores</Empty></Card>}
+      )) : <Card><Empty>No hay proveedores. Agregá el primero arriba.</Empty></Card>}
     </div>
   )
 }

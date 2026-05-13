@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { today } from '../utils/helpers'
 import {
   movimientosService,
   clientesService,
@@ -103,8 +104,26 @@ export function DataProvider({ children }) {
     setData(d => ({ ...d, cheques: [...d.cheques, saved] }))
   }
   const marcarChequeCobrado = async (id) => {
+    const cheque = data.cheques.find(c => c.id === id)
     await chequesService.marcarCobrado(id)
-    setData(d => ({ ...d, cheques: d.cheques.map(c => c.id === id ? { ...c, cobrado: true } : c) }))
+    if (cheque) {
+      const mov = {
+        tipo: 'ingreso',
+        cat: 'venta-local',
+        monto: cheque.monto,
+        description: `Cheque cobrado${cheque.num ? ' #' + cheque.num : ''}${cheque.de ? ' — ' + cheque.de : ''}`,
+        metodo: 'cheque',
+        fecha: today(),
+      }
+      const saved = await movimientosService.add(mov)
+      setData(d => ({
+        ...d,
+        cheques: d.cheques.map(c => c.id === id ? { ...c, cobrado: true } : c),
+        movimientos: [saved, ...d.movimientos],
+      }))
+    } else {
+      setData(d => ({ ...d, cheques: d.cheques.map(c => c.id === id ? { ...c, cobrado: true } : c) }))
+    }
   }
 
   const addTarjeta = async (item) => {
@@ -112,17 +131,56 @@ export function DataProvider({ children }) {
     setData(d => ({ ...d, tarjetas: [...d.tarjetas, saved] }))
   }
   const marcarTarjetaAcreditada = async (id) => {
+    const tarjeta = data.tarjetas.find(t => t.id === id)
     await tarjetasService.marcarAcreditado(id)
-    setData(d => ({ ...d, tarjetas: d.tarjetas.map(t => t.id === id ? { ...t, acreditado: true } : t) }))
+    if (tarjeta) {
+      const mov = {
+        tipo: 'ingreso',
+        cat: 'venta-local',
+        monto: tarjeta.monto,
+        description: `Tarjeta acreditada: ${tarjeta.tipo}${tarjeta.description ? ' — ' + tarjeta.description : ''}`,
+        metodo: 'tarjeta',
+        fecha: today(),
+      }
+      const saved = await movimientosService.add(mov)
+      setData(d => ({
+        ...d,
+        tarjetas: d.tarjetas.map(t => t.id === id ? { ...t, acreditado: true } : t),
+        movimientos: [saved, ...d.movimientos],
+      }))
+    } else {
+      setData(d => ({ ...d, tarjetas: d.tarjetas.map(t => t.id === id ? { ...t, acreditado: true } : t) }))
+    }
   }
 
   const addProveedor = async (item) => {
     const saved = await proveedoresService.add(item)
     setData(d => ({ ...d, proveedores: [...d.proveedores, saved] }))
   }
+  const removeProveedor = async (nombre) => {
+    await proveedoresService.deleteByNombre(nombre)
+    setData(d => ({ ...d, proveedores: d.proveedores.filter(p => p.nombre !== nombre) }))
+  }
   const marcarProveedorPagado = async (id) => {
+    const proveedor = data.proveedores.find(p => p.id === id)
+    if (!proveedor) return
+
+    const gasto = {
+      tipo: 'gasto',
+      cat: proveedor.tipo === 'cuotas' ? 'otro-gas' : 'servicio',
+      monto: proveedor.monto,
+      description: `Pago proveedor: ${proveedor.nombre}${proveedor.description ? ' - ' + proveedor.description : ''}`,
+      metodo: proveedor.tipo,
+      fecha: today(),
+    }
+
+    const saved = await movimientosService.add(gasto)
     await proveedoresService.marcarPagado(id)
-    setData(d => ({ ...d, proveedores: d.proveedores.map(p => p.id === id ? { ...p, pagado: true } : p) }))
+    setData(d => ({
+      ...d,
+      proveedores: d.proveedores.map(p => p.id === id ? { ...p, pagado: true } : p),
+      movimientos: [saved, ...d.movimientos],
+    }))
   }
 
   const addProducto = async (producto) => {
@@ -156,7 +214,7 @@ export function DataProvider({ children }) {
       addCliente, removeCliente, addMovCC,
       addCheque, marcarChequeCobrado,
       addTarjeta, marcarTarjetaAcreditada,
-      addProveedor, marcarProveedorPagado,
+      addProveedor, removeProveedor, marcarProveedorPagado,
       addProducto, removeProducto, updateVariante, addMovStock,
     }}>
       {children}

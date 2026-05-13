@@ -153,6 +153,13 @@ export const proveedoresService = {
       .eq('id', id)
     if (error) throw error
   },
+  async deleteByNombre(nombre) {
+    const { error } = await supabase
+      .from('proveedores')
+      .delete()
+      .eq('nombre', nombre)
+    if (error) throw error
+  },
 }
 
 // Productos
