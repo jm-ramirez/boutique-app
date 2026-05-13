@@ -7,7 +7,11 @@ export default function CuentasCorrientes() {
   const { data, addCliente, removeCliente, addMovCC } = useData()
   const [clienteForm, setClienteForm] = useState({ nombre: '', tel: '' })
   const [activeId, setActiveId] = useState(null)
-  const [movForm, setMovForm] = useState({ tipo: 'cargo', monto: '', description: '', fecha: today(), vence: '' })
+  const [movForm, setMovForm] = useState({
+    tipo: 'cargo', monto: '', description: '', fecha: today(), vence: '',
+    metodo: 'efectivo', chequeNum: '', chequeBanco: '', chequeFecha: today(),
+    tarjetaTipo: 'Visa', tarjetaFecha: today(),
+  })
 
   const setMov = (k, v) => setMovForm(f => ({ ...f, [k]: v }))
 
@@ -23,7 +27,10 @@ export default function CuentasCorrientes() {
     const payload = { ...movForm, monto: +movForm.monto }
     if (!payload.vence) payload.vence = null
     await addMovCC(activeId, payload)
-    setMovForm(f => ({ ...f, monto: '', description: '', vence: '' }))
+    setMovForm(f => ({
+      ...f, monto: '', description: '', vence: '',
+      chequeNum: '', chequeBanco: '', chequeFecha: today(), tarjetaFecha: today(),
+    }))
   }
 
   const borrarCliente = async (id) => {
@@ -79,6 +86,7 @@ export default function CuentasCorrientes() {
               <input type="date" value={movForm.fecha} onChange={e => setMov('fecha', e.target.value)} />
             </FormGroup>
           </FormRow>
+
           {movForm.tipo === 'cargo' && (
             <FormRow>
               <FormGroup label="Fecha límite de pago (opcional)" style={{ maxWidth: 220 }}>
@@ -86,6 +94,52 @@ export default function CuentasCorrientes() {
               </FormGroup>
             </FormRow>
           )}
+
+          {movForm.tipo === 'abono' && (
+            <>
+              <FormRow>
+                <FormGroup label="Método de pago" style={{ maxWidth: 170 }}>
+                  <select value={movForm.metodo} onChange={e => setMov('metodo', e.target.value)}>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="transferencia">Transferencia</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="tarjeta">Tarjeta de crédito</option>
+                  </select>
+                </FormGroup>
+
+                {movForm.metodo === 'cheque' && (<>
+                  <FormGroup label="N° cheque" style={{ maxWidth: 120 }}>
+                    <input type="text" value={movForm.chequeNum} onChange={e => setMov('chequeNum', e.target.value)} placeholder="12345" />
+                  </FormGroup>
+                  <FormGroup label="Banco">
+                    <input type="text" value={movForm.chequeBanco} onChange={e => setMov('chequeBanco', e.target.value)} placeholder="Banco Nación" />
+                  </FormGroup>
+                  <FormGroup label="Fecha de acreditación" style={{ maxWidth: 155 }}>
+                    <input type="date" value={movForm.chequeFecha} onChange={e => setMov('chequeFecha', e.target.value)} />
+                  </FormGroup>
+                </>)}
+
+                {movForm.metodo === 'tarjeta' && (<>
+                  <FormGroup label="Tarjeta" style={{ maxWidth: 130 }}>
+                    <select value={movForm.tarjetaTipo} onChange={e => setMov('tarjetaTipo', e.target.value)}>
+                      {['Visa', 'Mastercard', 'Naranja', 'Cabal', 'Otra'].map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </FormGroup>
+                  <FormGroup label="Fecha de acreditación" style={{ maxWidth: 155 }}>
+                    <input type="date" value={movForm.tarjetaFecha} onChange={e => setMov('tarjetaFecha', e.target.value)} />
+                  </FormGroup>
+                </>)}
+              </FormRow>
+
+              {(movForm.metodo === 'cheque' || movForm.metodo === 'tarjeta') && (
+                <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8, padding: '6px 10px', background: 'var(--color-info-bg)', borderRadius: 'var(--radius-md)' }}>
+                  <i className="ti ti-info-circle" aria-hidden="true" style={{ marginRight: 5 }} />
+                  El ingreso se registrará en Ingresos/Gastos recién cuando marques el {movForm.metodo === 'cheque' ? 'cheque como cobrado' : 'pago como acreditado'} en Cobros.
+                </div>
+              )}
+            </>
+          )}
+
           <Btn variant="primary" onClick={agregarMovCC}>
             <i className="ti ti-plus" aria-hidden="true" /> Registrar
           </Btn>
@@ -98,6 +152,7 @@ export default function CuentasCorrientes() {
                 <Th style={{ width: 80 }}>Fecha</Th>
                 <Th style={{ width: 75 }}>Tipo</Th>
                 <Th>Descripción</Th>
+                <Th style={{ width: 100 }}>Método</Th>
                 <Th style={{ width: 110 }}>Vence</Th>
                 <Th style={{ width: 85, textAlign: 'right' }}>Monto</Th>
                 <Th style={{ width: 85, textAlign: 'right' }}>Saldo</Th>
@@ -109,6 +164,11 @@ export default function CuentasCorrientes() {
                   <Td>{fmtDate(m.fecha)}</Td>
                   <Td><Badge type={m.tipo === 'cargo' ? 'gasto' : 'ingreso'}>{m.tipo === 'cargo' ? 'Cargo' : 'Abono'}</Badge></Td>
                   <Td style={{ color: 'var(--color-text-secondary)' }}>{m.description || '—'}</Td>
+                  <Td>
+                    {m.tipo === 'abono' && m.metodo
+                      ? <Badge type={m.metodo}>{m.metodo === 'cuenta-corriente' ? 'Cta. cte.' : m.metodo.charAt(0).toUpperCase() + m.metodo.slice(1)}</Badge>
+                      : '—'}
+                  </Td>
                   <Td>
                     {m.tipo === 'cargo' && m.vence
                       ? <Badge type={m.dias < 0 ? 'vencido' : m.dias <= 7 ? 'pendiente' : 'default'}>
@@ -123,7 +183,7 @@ export default function CuentasCorrientes() {
                     {fmt(m.saldoAcum)}
                   </Td>
                 </tr>
-              )) : <tr><td colSpan={6}><Empty>Sin movimientos aún</Empty></td></tr>}
+              )) : <tr><td colSpan={7}><Empty>Sin movimientos aún</Empty></td></tr>}
             </tbody>
           </TableWrapper>
         </Card>

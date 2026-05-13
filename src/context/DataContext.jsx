@@ -81,21 +81,47 @@ export function DataProvider({ children }) {
     setData(d => ({ ...d, clientes: d.clientes.filter(c => c.id !== id), movCC: rest }))
   }
   const addMovCC = async (clienteId, mov) => {
-    const saved = await movCCService.add(clienteId, mov)
+    const { chequeNum, chequeBanco, chequeFecha, tarjetaTipo, tarjetaFecha, ...ccMov } = mov
+    const saved = await movCCService.add(clienteId, ccMov)
     setData(d => ({
       ...d,
       movCC: { ...d.movCC, [clienteId]: [...(d.movCC[clienteId] || []), saved] },
     }))
 
     if (mov.tipo === 'abono') {
-      await addMovimiento({
-        tipo: 'ingreso',
-        cat: 'venta-local',
-        monto: mov.monto,
-        description: mov.description || 'Abono cuenta corriente',
-        metodo: 'cuenta-corriente',
-        fecha: mov.fecha,
-      })
+      const cliente = data.clientes.find(c => c.id === clienteId)
+      const clienteNombre = cliente?.nombre || 'Cliente'
+
+      if (mov.metodo === 'cheque') {
+        const savedCheque = await chequesService.add({
+          de: clienteNombre,
+          monto: mov.monto,
+          num: chequeNum || '',
+          banco: chequeBanco || '',
+          fecha: chequeFecha || mov.fecha,
+          description: mov.description || 'Abono cuenta corriente',
+          cobrado: false,
+        })
+        setData(d => ({ ...d, cheques: [...d.cheques, savedCheque] }))
+      } else if (mov.metodo === 'tarjeta') {
+        const savedTarjeta = await tarjetasService.add({
+          description: `${clienteNombre}${mov.description ? ' — ' + mov.description : ''}`,
+          monto: mov.monto,
+          tipo: tarjetaTipo || 'Otra',
+          fecha: tarjetaFecha || mov.fecha,
+          acreditado: false,
+        })
+        setData(d => ({ ...d, tarjetas: [...d.tarjetas, savedTarjeta] }))
+      } else {
+        await addMovimiento({
+          tipo: 'ingreso',
+          cat: 'venta-local',
+          monto: mov.monto,
+          description: mov.description || 'Abono cuenta corriente',
+          metodo: mov.metodo || 'efectivo',
+          fecha: mov.fecha,
+        })
+      }
     }
   }
 
