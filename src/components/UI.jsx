@@ -5,27 +5,30 @@ const s = {
     background: 'var(--color-bg)',
     border: '0.5px solid var(--color-border)',
     borderRadius: 'var(--radius-lg)',
-    padding: '1rem 1.25rem',
+    padding: '1.1rem 1.25rem',
     marginBottom: '1rem',
+    boxShadow: 'var(--shadow-card)',
   },
   cardTitle: {
-    fontSize: 11,
-    fontWeight: 500,
-    color: 'var(--color-text-secondary)',
+    fontSize: 10.5,
+    fontWeight: 600,
+    color: 'var(--color-text-tertiary)',
     textTransform: 'uppercase',
-    letterSpacing: '.4px',
-    marginBottom: 12,
+    letterSpacing: '.6px',
+    marginBottom: 14,
   },
   metric: {
-    background: 'var(--color-bg-secondary)',
-    borderRadius: 'var(--radius-md)',
-    padding: 12,
+    background: 'var(--color-bg)',
+    borderRadius: 'var(--radius-lg)',
+    padding: '14px 16px',
+    border: '0.5px solid var(--color-border)',
+    boxShadow: 'var(--shadow-card)',
   },
-  metricLabel: { fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 3 },
-  metricValue: { fontSize: 20, fontWeight: 500 },
-  metricSub: { fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 },
+  metricLabel: { fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4, fontWeight: 500, letterSpacing: '0.02em' },
+  metricValue: { fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.2 },
+  metricSub: { fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 4 },
   alert: { padding: '10px 14px', borderRadius: 'var(--radius-md)', fontSize: 13, marginBottom: 10, lineHeight: 1.5 },
-  badge: { display: 'inline-block', padding: '2px 7px', borderRadius: 6, fontSize: 10, fontWeight: 500, whiteSpace: 'nowrap' },
+  badge: { display: 'inline-block', padding: '2px 9px', borderRadius: 99, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: '0.01em' },
   btn: {
     padding: '7px 14px',
     border: '0.5px solid var(--color-border-md)',
@@ -35,10 +38,12 @@ const s = {
     cursor: 'pointer',
     fontSize: 13,
     whiteSpace: 'nowrap',
+    fontWeight: 400,
+    lineHeight: 1.4,
   },
-  btnPrimary: { background: '#185FA5', color: '#fff', borderColor: '#185FA5' },
-  btnDanger: { background: 'none', color: '#A32D2D', borderColor: '#F09595' },
-  btnSuccess: { background: 'none', color: '#0F6E56', borderColor: '#5DCAA5' },
+  btnPrimary: { background: '#185FA5', color: '#fff', borderColor: '#185FA5', fontWeight: 500 },
+  btnDanger: { background: 'var(--color-danger-bg)', color: '#A32D2D', borderColor: '#F09595' },
+  btnSuccess: { background: 'var(--color-success-bg)', color: '#0F6E56', borderColor: '#5DCAA5' },
 }
 
 export const Card = ({ children, style }) => (
@@ -156,13 +161,13 @@ export const TableWrapper = ({ children }) => (
 )
 
 export const Th = ({ children, style }) => (
-  <th style={{ textAlign: 'left', fontSize: 10, fontWeight: 500, color: 'var(--color-text-secondary)', padding: '6px 8px', borderBottom: '0.5px solid var(--color-border)', whiteSpace: 'nowrap', ...style }}>
+  <th style={{ textAlign: 'left', fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', padding: '8px 10px', borderBottom: '0.5px solid var(--color-border)', whiteSpace: 'nowrap', background: 'var(--color-bg-secondary)', letterSpacing: '0.04em', textTransform: 'uppercase', ...style }}>
     {children}
   </th>
 )
 
 export const Td = ({ children, style }) => (
-  <td style={{ padding: '7px 8px', borderBottom: '0.5px solid var(--color-border)', color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'middle', ...style }}>
+  <td style={{ padding: '9px 10px', borderBottom: '0.5px solid var(--color-border)', color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'middle', ...style }}>
     {children}
   </td>
 )
